@@ -53,5 +53,9 @@ def get_model(full_model_name: str, key: str | None = None) -> LanguageModel:
         from platogram.llm.anthropic import Model
 
         return Model(full_model_name.split("/")[-1], key)
+    elif full_model_name.startswith("fireworks/"):
+        from platogram.llm.fireworks import Model
+
+        return Model(full_model_name.split("/")[-1], key)
     else:
         raise ValueError(f"Unsupported language model: {full_model_name}")

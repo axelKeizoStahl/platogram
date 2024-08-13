@@ -2,7 +2,9 @@ import os
 import re
 from typing import Any, Generator, Literal, Sequence
 
-import anthropic
+import fireworks
+from fireworks.client import Fireworks
+import tiktoken
 from anthropic import AnthropicError
 from tenacity import (
     retry,
@@ -14,6 +16,7 @@ from tenacity import (
 from platogram.ops import render
 from platogram.types import Assistant, Content, User
 
+### TODO retry
 RETRY = retry(
     stop=(stop_after_delay(300) | stop_after_attempt(5)),
     retry=retry_if_exception_type(AnthropicError),
@@ -23,31 +26,31 @@ RETRY = retry(
 class Model:
     def __init__(self, model: str, key: str | None = None) -> None:
         if key is None:
-            key = os.environ["ANTHROPIC_API_KEY"]
+            key = os.environ["FIREWORKS_API_KEY"]
 
-        if model == "claude-3-haiku":
-            self.model = "claude-3-haiku-20240307"
-        elif model == "claude-3-opus":
-            self.model = "claude-3-opus-20240229"
-        elif model == "claude-3-sonnet":
-            self.model = "claude-3-sonnet-20240229"
-        elif model == "claude-3-5-sonnet":
-            self.model = "claude-3-5-sonnet-20240620"
+        if model == "llama 3.1405B":
+            self.model = "accounts/fireworks/models/llama-v3p1-405b-instruct"
+        elif model == "llama 3.170B":
+            self.model = "accounts/fireworks/models/llama-v3p1-70b-instruct"
+        elif model == "llama 3.18B":
+            self.model = "accounts/fireworks/models/llama-v3p1-8b-instruct"
         else:
             raise ValueError(f"Unknown model: {model}")
 
-        self.client = anthropic.Client(api_key=key)
+        self.client = Fireworks(api_key=key)
 
     def count_tokens(self, text: str) -> int:
-        return self.client.count_tokens(text)
+        encoding = tiktoken.encoding_for_model("gpt-3.5-turbo") # just using this encoding for now, working on llama version
+        num_tokens = len(encoding.encode(text))
+        return num_tokens
 
     def prompt_model(
         self,
         messages: Sequence[User | Assistant],
-        max_tokens: int = 4096,
+        max_tokens: int = 4096, 
         temperature=0.1,
         stream=False,
-        system: str | None = None,
+        system_prompt: str | None = None,
         tools: list[dict] | None = None,
     ) -> str | dict[str, str] | Generator[str, None, None]:
         kwargs: dict[str, Any] = {}
@@ -55,50 +58,52 @@ class Model:
         if tools:
             kwargs["tools"] = tools
 
-        if system:
-            kwargs["system"] = system
+        messages = [{"role": m.role, "content": m.content} for m in messages]
+        if system_prompt:
+            messages = [{"role": "system", "content": system_prompt}] + messages
 
+        print(messages)
+        print('-'*8)
         if not stream:
 
             @RETRY
             def get_response(messages):
-                response = self.client.messages.create(
+                response = self.client.chat.completions.create(
                     model=self.model,
+                    messages=messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    messages=[{"role": m.role, "content": m.content} for m in messages],
                     **kwargs,
                 )
 
-                if response.stop_reason == "tool_use":
-                    print('TOOL_USE'*5)
-                    print(response.content[-1].input)
-                    return response.content[-1].input
+                if response.choices[0].message.tool_calls: # WIP, fireworks devs are working on this
+                    print(response.choices[0].message.tool_calls.function.name)
+                    print(response.choices[0].message.tool_calls.function.arguments)
+                    return str(response.choices)
 
-                return response.content[0].text
+                return str(response.choices[0].message.content)
 
             return get_response(messages)
 
         def stream_text():
-            with self.client.messages.stream(
+            response_generator = self.client.chat.completions.create(
                 model=self.model,
+                messages=messages.extend([{"role": m.role, "content": m.content} for m in messages]),
                 max_tokens=max_tokens,
                 temperature=temperature,
-                messages=[{"role": m.role, "content": m.content} for m in messages],
                 **kwargs,
-            ) as stream:
+            )
 
-                @RETRY
-                def get_response():
-                    while True:
-                        for text in stream.text_stream:
-                            yield text
-                        break
+            @RETRY
+            def get_response():
+                for chunck in response_generator:
+                    if chunck.choices[0].delta.content:
+                        yield chunck.choices[0].delta.content
 
-                return get_response()
+            return get_response()
 
         return stream_text()
-
+### TODO
     def get_meta(
         self,
         paragraphs: list[str],
@@ -151,31 +156,31 @@ Siempre llama al tool render_content_info y pasa la información sobre el conten
         }
 
         tool_definition = {
-            "name": "render_content_info",
-            "description": description[lang],
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    name: {"type": "string", "description": description}
-                    for name, description in properties.items()
+            "type": "function",
+            "function": {
+                "name": "render_content_info",
+                "description": description[lang],
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        name: {"type": "string", "description": description}
+                        for name, description in properties.items()
+                    },
+                    "required": list(properties.keys()),
                 },
-                "required": list(properties.keys()),
-            },
+            }
         }
 
         text = "\n".join([f"<p>{paragraph}</p>" for paragraph in paragraphs])
 
         meta = self.prompt_model(
-            system=system_prompt[lang],
+            system_prompt=system_prompt[lang],
             messages=[User(content=f"<text>{text}</text>")],
             tools=[tool_definition],
             max_tokens=max_tokens,
             temperature=temperature,
         )
 
-        print("-"*10)
-        print(meta)
-        print("-"*10)
         assert isinstance(
             meta, dict
         ), f"Expected LLM to return dict with meta information, got {meta}"
@@ -260,7 +265,7 @@ Sigue estos pasos para transformar los <passages> en un diccionario de capítulo
         text = "\n".join([f"<p>{passage}</p>" for passage in passages])
 
         chapters = self.prompt_model(
-            system=system_prompt[lang],
+            system_prompt=system_prompt[lang],
             messages=[User(content=f"<passages>{text}</passages>")],
             tools=[tool_definition],
             max_tokens=max_tokens,
@@ -336,7 +341,7 @@ Siga estos pasos para reescribir el <transcript> y mantener cada <marker>:
                 User(content=f"<transcript>{text_with_markers}</transcript>"),
                 Assistant(content="<paragraphs><p>"),
             ],
-            system=system_prompt[lang],
+            system_prompt=system_prompt[lang],
             temperature=temperature,
         )
         assert isinstance(
@@ -449,7 +454,7 @@ Sigue los pasos en <scratchpad> para construir <response> que esté bien estruct
 </prompt>"""
                 )
             ],
-            system=system_prompt[lang],
+            system_prompt=system_prompt[lang],
             temperature=temperature,
         )
         assert isinstance(response, str), f"Expected LLM to return str, got {response}"
