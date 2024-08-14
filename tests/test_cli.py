@@ -16,7 +16,7 @@ def test_process_url():
         library = plato.library.get_semantic_local_chroma(Path(temp_dir))
 
         content = cli.process_url(
-            url, library, anthropic_api_key, assemblyai_api_key, extract_images=True
+            url, library, "anthropic/claude-3-5-sonnet", anthropic_api_key, assemblyai_api_key, extract_images=True
         )
 
         assert isinstance(content, Content)
