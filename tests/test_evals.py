@@ -66,27 +66,33 @@ To comprehensively evaluate the performance of these models, you must assess the
 
 
 def test_eval_get_paragraphs() -> None:
-    with open("samples/obama.json") as f:
-        content = Content(**json.load(f))
+    models = ["anthropic/claude-3-5-sonnet", "fireworks/llama 3.1405B"]
 
-    baseline = "\n".join(f"<p>{p}</p>" for p in content.passages)
-    baseline = f"<paragraphs>{baseline}</paragraphs>"
+    def test(model):
+        with open("samples/obama.json") as f:
+            content = Content(**json.load(f))
 
-    llm = plato.llm.get_model("anthropic/claude-3-5-sonnet")
-    text = plato.ops.render({i: t.text for i, t in enumerate(content.transcript)})
-    target = "\n".join(
-        f"<p>{p}</p>"
-        for p in plato.get_paragraphs(
-            text, llm, max_tokens=4096, temperature=0.5, chunk_size=2048
+        baseline = "\n".join(f"<p>{p}</p>" for p in content.passages)
+        baseline = f"<paragraphs>{baseline}</paragraphs>"
+
+        llm = plato.llm.get_model(model)
+        text = plato.ops.render({i: t.text for i, t in enumerate(content.transcript)})
+        target = "\n".join(
+            f"<p>{p}</p>"
+            for p in plato.get_paragraphs(
+                text, llm, max_tokens=4096, temperature=0.5, chunk_size=2048
+            )
         )
-    )
-    target = f"<paragraphs>{target}</paragraphs>"
+        target = f"<paragraphs>{target}</paragraphs>"
 
-    result = evaluate(
-        render({i: t.text for i, t in enumerate(content.transcript)}), baseline, target
-    )
+        result = evaluate(
+            render({i: t.text for i, t in enumerate(content.transcript)}), baseline, target
+        )
 
-    match = re.search(r"<suggested_model>(.*?)</suggested_model>", result, re.DOTALL)
-    assert match is not None
-    result = match.group(1)
-    assert result == "TARGET"
+        match = re.search(r"<suggested_model>(.*?)</suggested_model>", result, re.DOTALL)
+        assert match is not None
+        result = match.group(1)
+        assert result == "TARGET"
+
+    for model in models:
+        test(model)

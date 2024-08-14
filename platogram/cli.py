@@ -55,7 +55,8 @@ def render_paragraph(p: str, render_reference_fn: Callable[[int], str]) -> str:
 def process_url(
     url: str,
     library: Library,
-    anthropic_api_key: str,
+    model: str,
+    model_api_key: str,
     assemblyai_api_key: str | None = None,
     extract_images: bool = False,
     lang: str | None = None,
@@ -63,7 +64,7 @@ def process_url(
     if not lang:
         lang = "en"
 
-    llm = plato.llm.get_model("anthropic/claude-3-5-sonnet", anthropic_api_key)
+    llm = plato.llm.get_model(model, model_api_key)
     asr = (
         plato.asr.get_model("assembly-ai/best", assemblyai_api_key)
         if assemblyai_api_key
@@ -99,9 +100,10 @@ def prompt_context(
     context: list[Content],
     prompt: Sequence[Assistant | User],
     context_size: Literal["small", "medium", "large"],
-    anthropic_api_key: str | None,
+    model: str,
+    model_api_key: str | None,
 ) -> str:
-    llm = plato.llm.get_model("anthropic/claude-3-5-sonnet", anthropic_api_key)
+    llm = plato.llm.get_model(model, model_api_key)
     response = llm.prompt(
         prompt=prompt,
         context=context,
@@ -126,7 +128,8 @@ def main():
         help="URLs and files to query, if none provided, will use all content",
     )
     parser.add_argument("--lang", help="Content language: en, es")
-    parser.add_argument("--anthropic-api-key", help="Anthropic API key")
+    parser.add_argument("--model", default="fireworks/llama 3.1405B", help="LLM model")
+    parser.add_argument("--model-api-key", help="LLM API key")
     parser.add_argument("--assemblyai-api-key", help="AssemblyAI API key (optional)")
     parser.add_argument(
         "--retrieve", default=None, help="Number of results to retrieve"
@@ -185,7 +188,8 @@ def main():
             process_url(
                 url_or_file,
                 library,
-                args.anthropic_api_key,
+                args.model,
+                args.model_api_key,
                 args.assemblyai_api_key,
                 extract_images=args.images,
                 lang=lang,
@@ -212,7 +216,7 @@ def main():
 
         result += f"""\n\n{
             prompt_context(
-                context, prompt, args.context_size, args.anthropic_api_key,
+                context, prompt, args.context_size, args.model, args.model_api_key,
             )}\n\n"""
 
     for content in context:

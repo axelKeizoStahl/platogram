@@ -5,17 +5,21 @@ set -e
 URL="$1"
 LANG="en"
 INLINE_REFERENCES="false"
+MODEL="fireworks/llama 3.1405B"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --lang)
             LANG="$2"
-            shift
-            shift
+            shift 2
             ;;
         --inline-references)
             INLINE_REFERENCES="true"
             shift
+            ;;
+        --model)
+            MODEL="$2"
+            shift 2
             ;;
         *)
             shift
@@ -50,11 +54,11 @@ case "$LANG" in
     ;;
 esac
 
-# check if ANTHROPIC_API_KEY is set
-if [ -z "$ANTHROPIC_API_KEY" ]; then
-    echo "ANTHROPIC_API_KEY is not set"
-    echo "Obtain it from https://console.anthropic.com/keys"
-    echo "Run: export ANTHROPIC_API_KEY=<your-api-key>"
+if { [[ -z "$FIREWORKS_API_KEY" && $MODEL == fireworks* ]] || [[ -z "$ANTHROPIC_API_KEY" && $MODEL == anthropic* ]] }; then
+    echo "Your model's api key is not set, set either FIREWORKS_API_KEY or ANTHROPIC_API_KEY accordingly"
+    echo "If you mean to use an anthropic model instead of a fireworks model, use the --model parameter followed by the model's name"
+    echo "Obtain api keys by signing into https://www.anthropic.com/ or https://fireworks.ai/"
+    echo "Then run: export FIREWORKS_API_KEY=<your-api-key>, or ANTHROPIC_API_KEY"
     exit 1
 fi
 
@@ -62,7 +66,7 @@ echo "Indexing $URL..."
 if [ -z "$ASSEMBLYAI_API_KEY" ]; then
     echo "ASSEMBLYAI_API_KEY is not set. Retrieving text from URL (subtitles, etc)."
 
-    if [ "$2" = "--images" ]; then
+    if [ -n "$1" = "--images" ]; then
         plato --images "$URL" --lang "$LANG" > /dev/null
     else
         plato "$URL" --lang "$LANG" > /dev/null
@@ -78,14 +82,15 @@ else
 fi
 
 echo "Fetching title, abstract, passages, and references..."
-TITLE=$(plato --title "$URL" --lang "$LANG")
-ABSTRACT=$(plato --abstract "$URL" --lang "$LANG")
-PASSAGES=$(plato --passages --chapters --inline-references "$URL" --lang "$LANG")
-REFERENCES=$(plato --references "$URL" --lang "$LANG")
-CHAPTERS=$(plato --chapters "$URL" --lang "$LANG")
+TITLE=$(plato --model "$MODEL" --title "$URL" --lang "$LANG")
+ABSTRACT=$(plato --model "$MODEL" --abstract "$URL" --lang "$LANG")
+PASSAGES=$(plato --model "$MODEL" --passages --chapters --inline-references "$URL" --lang "$LANG")
+REFERENCES=$(plato --model "$MODEL" --references "$URL" --lang "$LANG")
+CHAPTERS=$(plato --model "$MODEL" --chapters "$URL" --lang "$LANG")
 
 echo "Generating Contributors..."
 CONTRIBUTORS=$(plato \
+    --model "$MODEL" \
     --query "$CONTRIBUTORS_PROMPT" \
     --generate \
     --context-size large \
@@ -94,6 +99,7 @@ CONTRIBUTORS=$(plato \
 
 echo "Generating Introduction..."
 INTRODUCTION=$(plato \
+    --model "$MODEL" \
     --query "$INTRODUCTION_PROMPT" \
     --generate \
     --context-size large \
@@ -103,6 +109,7 @@ INTRODUCTION=$(plato \
 
 echo "Generating Conclusion..."
 CONCLUSION=$(plato \
+    --model "$MODEL" \
     --query "$CONCLUSION_PROMPT" \
     --generate \
     --context-size large \
