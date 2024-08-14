@@ -6,16 +6,17 @@ This script converts audio content into a structured paper format using Platogra
 
 - Bash environment
 - [Platogram](https://github.com/code-anyway/platogram) installed
-- ANTHROPIC_API_KEY (required)
+- ANTHROPIC_API_KEY / FIREWORKS_API_KEY (required)
 - ASSEMBLYAI_API_KEY (optional, for audio transcription)
 
 ## Usage
 
 ```bash
-./audio_to_paper.sh <URL> [--images]
+./audio_to_paper.sh <URL> [--model] [--images]
 ```
 
 - `<URL>`: The URL of the audio content
+- `--model: (optional): specifies llm model (default is llama 3.1, fireworksai)`
 - `--images` (optional): Include images
 
 ## Features
