@@ -52,18 +52,20 @@ class Model:
         stream=False,
         system_prompt: str | None = None,
         tools: list[dict] | None = None,
+        response_format: dict[str, str] | None = None,
     ) -> str | dict[str, str] | Generator[str, None, None]:
         kwargs: dict[str, Any] = {}
 
         if tools:
             kwargs["tools"] = tools
 
+        if response_format:
+            kwargs["response_format"] = response_format
+
         messages = [{"role": m.role, "content": m.content} for m in messages]
         if system_prompt:
             messages = [{"role": "system", "content": system_prompt}] + messages
 
-        print(messages)
-        print('-'*8)
         if not stream:
 
             @RETRY
@@ -81,7 +83,7 @@ class Model:
                     print(response.choices[0].message.tool_calls.function.arguments)
                     return str(response.choices)
 
-                return str(response.choices[0].message.content)
+                return response.choices[0].message.content
 
             return get_response(messages)
 
@@ -121,7 +123,11 @@ You are a very capable editor, speaker, educator, and author with a knack for co
 <task>
 You will be given a <text> that contains paragraphs enclosed in <p></p> tags and you will need to come up with information about the content that helps to understand it.
 Use simple language. Use only the words from <text>.
-Always call render_content_info tool and pass the information about the content.
+In the end, return information in json. The json should have keys, title and summary, whose values are as follows:
+ - title: Come up with the title which speaks to the essence of <text>. Use simple language. Use only the words from <text>.
+ - summary: Distill the key insights and express them as a comprehensive abstract summary. Use simple language. Use only words from <text>. Make sure to cover all paragraphs <p>...</p>.
+
+Always return the information about the content in json form.
 </task>
 """.strip(),
             "es": """<role>
@@ -173,13 +179,14 @@ Siempre llama al tool render_content_info y pasa la información sobre el conten
 
         text = "\n".join([f"<p>{paragraph}</p>" for paragraph in paragraphs])
 
-        meta = self.prompt_model(
+        meta = eval(self.prompt_model(
             system_prompt=system_prompt[lang],
             messages=[User(content=f"<text>{text}</text>")],
-            tools=[tool_definition],
+            #tools=[tool_definition],
             max_tokens=max_tokens,
             temperature=temperature,
-        )
+            response_format={"type": "json_object"},
+        ))
 
         assert isinstance(
             meta, dict
@@ -201,12 +208,15 @@ Siempre llama al tool render_content_info y pasa la información sobre el conten
 You are a very capable editor, speaker, educator, and author who is really good at reading text that represents transcript of human speech and rewriting it into well-structured, information-dense written text.
 </role>
 <task>
+RETURN IN JSON FORMAT!
 You will be given <passages> of text in a format "<p>text【0】text【1】... text 【2】</p>". Where each【number】is a <marker> and goes AFTER the text it references. Markers are zero-based and are in sequential order.
 
 Follow these steps to transform the <passages> into a dictionary of chapters:
 1. Read the <passages> carefully and come up with a list of <chapters> that equally cover the <passages>.
 2. Review <chapters> and <passages> and for each chapter generate <title> and first <marker> from the relevant passage and create a <chapter> object and add it to the list.
-3. Call <chapter_tool> and pass the list of <chapter> objects.
+3. In a json object, under the key "entities", put a list containing all the <chapter> objects, in the chapter objects, the marker should be a string in the format '【number】'.  
+
+Always return just a json object.
 </task>
 """.strip(),
             "es": """<role>
@@ -233,7 +243,7 @@ Sigue estos pasos para transformar los <passages> en un diccionario de capítulo
         description = {
             "en": "Renders chapters from the <passages>.",
             "es": "Genera capítulos a partir de los <passages>.",
-        }
+        } 
 
         properties = {
             "title": title[lang],
@@ -264,13 +274,14 @@ Sigue estos pasos para transformar los <passages> en un diccionario de capítulo
 
         text = "\n".join([f"<p>{passage}</p>" for passage in passages])
 
-        chapters = self.prompt_model(
+        chapters = eval(self.prompt_model(
             system_prompt=system_prompt[lang],
             messages=[User(content=f"<passages>{text}</passages>")],
-            tools=[tool_definition],
+            #tools=[tool_definition],
             max_tokens=max_tokens,
             temperature=temperature,
-        )
+            response_format={"type": "json_object"},
+        ))
 
         assert isinstance(
             chapters, dict
