@@ -56,13 +56,13 @@ asr = plato.asr.get_model("assembly-ai/best", "YOUR_ASSEMBLYAI_API_KEY")  # Opti
 url = "https://www.youtube.com/shorts/XsLK3tPy9SI"
 transcript = plato.extract_transcript(url, asr)
 content = plato.index(transcript, llm)
-  
+
 # Access generated content
 print(content.title)
 print(content.summary)
 
 for passage in content.passages:
-    print(passage)
+    print(passage)
 ```
 
 ## Use Cases
