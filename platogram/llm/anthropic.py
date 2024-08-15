@@ -71,6 +71,9 @@ class Model:
                 )
 
                 if response.stop_reason == "tool_use":
+                    print("\n")
+                    print([{"role": m.role, "content": m.content} for m in messages])
+                    print("\n")
                     print('TOOL_USE'*5)
                     print(response.content[-1].input)
                     return response.content[-1].input
@@ -266,6 +269,10 @@ Sigue estos pasos para transformar los <passages> en un diccionario de capítulo
             max_tokens=max_tokens,
             temperature=temperature,
         )
+
+        print("- "*10+"MARKERS?")
+        print(chapters)
+        print("-"*10)
 
         assert isinstance(
             chapters, dict

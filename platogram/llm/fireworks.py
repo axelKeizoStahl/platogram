@@ -2,7 +2,6 @@ import os
 import re
 from typing import Any, Generator, Literal, Sequence
 
-import fireworks
 from fireworks.client import Fireworks
 import tiktoken
 from anthropic import AnthropicError
@@ -204,20 +203,63 @@ Siempre llama al tool render_content_info y pasa la información sobre el conten
             lang = "en"
 
         system_prompt = {
-            "en": """<role>
-You are a very capable editor, speaker, educator, and author who is really good at reading text that represents transcript of human speech and rewriting it into well-structured, information-dense written text.
-</role>
-<task>
-RETURN IN JSON FORMAT!
-You will be given <passages> of text in a format "<p>text【0】text【1】... text 【2】</p>". Where each【number】is a <marker> and goes AFTER the text it references. Markers are zero-based and are in sequential order.
+            "en": """
+### Example ###
 
-Follow these steps to transform the <passages> into a dictionary of chapters:
-1. Read the <passages> carefully and come up with a list of <chapters> that equally cover the <passages>.
-2. Review <chapters> and <passages> and for each chapter generate <title> and first <marker> from the relevant passage and create a <chapter> object and add it to the list.
-3. In a json object, under the key "entities", put a list containing all the <chapter> objects, in the chapter objects, the marker should be a string in the format '【number】'.  
+**Input:**
 
-Always return just a json object.
-</task>
+```html
+<passages>
+  <p>When these models generate new text, the process involves inputting a full context describing the interaction into the model.【3】 The model then predicts what word comes next【4】 and takes a random sample from the probability distribution it generates.【5】 This randomly chosen word is appended to the full context, and the process repeats itself over and over again with the extended text.【6】</p>
+  <p>The temperature setting is a way to modify the probability distributions that the model generates.【7】 Setting a high temperature gives more weight to less likely words, which essentially increases the model's chances of selecting unusual phrases and ideas. Conversely, a low temperature makes it more likely for the model to choose the most predictable words.【8】 This allows users to control the balance between creativity and predictability in the model's output.</p>
+</passages>
+```
+
+**Output:**
+
+```json
+{
+  "entities": [
+    {
+      "title": "The Text Generation Process",
+      "marker": "【3】"
+    },
+    {
+      "title": "Understanding Probability Distribution in Text Generation",
+      "marker": "【4】"
+    },
+    {
+      "title": "How Text Generation Repeats",
+      "marker": "【5】"
+    },
+    {
+      "title": "The Impact of Temperature on Text Generation",
+      "marker": "【7】"
+    }
+  ]
+}
+```
+
+
+### Instruction ###
+
+You are tasked with analyzing passages of text formatted as `<p>text【0】text【1】... text【2】</p>`. Each marker (e.g., 【0】, 【1】, etc.) follows the text it references. Your goal is to extract and organize this information into a structured JSON format.
+
+### Requirements ###
+
+1. **Extract and Identify**: From the given text passages, identify the content associated with each marker.
+2. **Title Creation**: Determine a concise title for each section of text based on its content.
+3. **JSON Format**: Output a JSON object with a key called `entities`. The value should be a list of chapter objects, each containing:
+   - `marker`: The marker of the chapter in the format '【number】'.
+   - `title`: A brief title summarizing the section’s content.
+4. **Rules**:
+   - **You MUST** provide titles for each section of text.
+   - **You MUST** use the specified marker format in your output.
+   - **You will be penalized** if there are no chapter objects under the `entities` key.
+   - **Ensure that your answer is unbiased and avoids relying on stereotypes.**
+
+
+If you follow all these guidelines, you will be rewarded
 """.strip(),
             "es": """<role>
 Eres un editor, orador, educador y autor muy capaz que es realmente bueno leyendo texto que representa la transcripción del habla humana y reescribiéndolo en un texto escrito bien estructurado y denso en información.
@@ -282,6 +324,23 @@ Sigue estos pasos para transformar los <passages> en un diccionario de capítulo
             temperature=temperature,
             response_format={"type": "json_object"},
         ))
+        if not chapters["entities"]:
+            chapters = eval(self.prompt_model(
+                system_prompt=system_prompt[lang],
+                messages=[User(content=f"<passages>{text}</passages>")],
+                #tools=[tool_definition],
+                max_tokens=max_tokens,
+                temperature=temperature,
+                response_format={"type": "json_object"},
+            ))
+
+        print("-"*8+"chapters, markers?")
+        print(chapters)
+        print("-"*8+"chapters, markers?")
+        messages = [{"role": m.role, "content": m.content} for m in [User(content=f"<passages>{text}</passages>")]]
+        if system_prompt:
+            messages = [{"role": "system", "content": system_prompt}] + messages
+        print(messages)
 
         assert isinstance(
             chapters, dict

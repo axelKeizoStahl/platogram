@@ -85,6 +85,9 @@ echo "Fetching title, abstract, passages, and references..."
 TITLE=$(plato --model "$MODEL" --title "$URL" --lang "$LANG")
 ABSTRACT=$(plato --model "$MODEL" --abstract "$URL" --lang "$LANG")
 PASSAGES=$(plato --model "$MODEL" --passages --chapters --inline-references "$URL" --lang "$LANG")
+echo "--------------------------PASSAGES------"
+echo "$PASSAGES"
+echo "--------------------------PASSAGES------"
 REFERENCES=$(plato --model "$MODEL" --references "$URL" --lang "$LANG")
 CHAPTERS=$(plato --model "$MODEL" --chapters "$URL" --lang "$LANG")
 
